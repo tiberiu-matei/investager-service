@@ -4,34 +4,36 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-    - name: Build
+    - name: checkout
+      uses: actions/checkout@v2
+    - name: install rust tools
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+    - name: build
       run: cargo build --release
-    - name: Test
+    - name: test
       run: cargo test
-    - name: Zip output
+    - name: zip binary
       uses: papeloto/action-zip@v1
       with:
-        files: src/main.exe src/main.pdb
+        files: target/release/investager-service
         dest: investager-service.zip
-    - name: Upload
+    - name: upload zip
       uses: actions/upload-artifact@v2
       with:
         name: investager-service
-        path: investager-api.zip
+        path: investager-service.zip
   deploy:
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Get artifact
+      - name: get artifact
         uses: actions/download-artifact@v2
         with:
           name: investager-service
-      - name: Copy artifact
+      - name: copy artifact
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.PROD_HOST }}
@@ -39,17 +41,18 @@ jobs:
           key: ${{ secrets.PROD_KEY }}
           source: "investager-service.zip"
           target: "/home/investager"
-      - name: Upgrade
+      - name: upgrade
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USERNAME }}
           key: ${{ secrets.PROD_KEY }}
           script: |
-            systemctl stop investager-api
+            systemctl stop investager-service
             cd /home/investager
             zip -r "$(date +%Y%m%d_%H%M%S)_service.zip" service/
             rm -rf service
             unzip investager-service.zip -d service
+            chmod 755 service/investager-service
             rm investager-service.zip
-            systemctl start investager-api
+            systemctl start investager-service
